@@ -7,8 +7,8 @@ import requests
 import json
 import time
 
-# BASE_URL = "http://localhost:8000"
-BASE_URL = "https://msa-zfd1.onrender.com"
+BASE_URL = "http://localhost"
+#BASE_URL = "https://msa-zfd1.onrender.com"
 
 def test_api():
     print("🚀 Тестирование Blog Platform API")

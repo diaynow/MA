@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from pydantic import PositiveInt
 from typing import List
-from src.models.database import get_db, User
+from uuid import UUID
+from src.models.database import get_db
 from src.models.schemas import (
     ArticleCreate, 
     ArticleUpdate, 
@@ -12,21 +13,46 @@ from src.models.schemas import (
     ErrorResponse
 )
 from src.controllers.crud import ArticleCRUD
-from src.middleware.auth import get_current_active_user
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import HTTPException, status
+from jose import JWTError
+from src.config import settings
 
 router = APIRouter(prefix="/api/articles", tags=["articles"])
+
+security = HTTPBearer()
+
+
+def get_user_id_from_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> UUID:
+    """Extract user_id from JWT token"""
+    
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    try:
+        from jose import jwt
+        payload = jwt.decode(credentials.credentials, settings.secret_key, algorithms=[settings.algorithm])
+        user_id_str = payload.get("user_id")
+        if user_id_str is None:
+            raise credentials_exception
+        return UUID(user_id_str)
+    except (JWTError, ValueError, TypeError):
+        raise credentials_exception
 
 
 @router.post("/", response_model=SuccessResponse, status_code=status.HTTP_201_CREATED)
 def create_article(
     article_data: ArticleCreate,
-    current_user: User = Depends(get_current_active_user),
+    user_id: UUID = Depends(get_user_id_from_token),
     db: Session = Depends(get_db)
 ):
     """Create a new article"""
     try:
         crud = ArticleCRUD(db)
-        db_article = crud.create_article(article_data, current_user.id)
+        db_article = crud.create_article(article_data, user_id)
         
         return SuccessResponse(
             message="Article created successfully",
@@ -110,13 +136,13 @@ def get_article_by_slug(
 def update_article(
     slug: str,
     article_data: ArticleUpdate,
-    current_user: User = Depends(get_current_active_user),
+    user_id: UUID = Depends(get_user_id_from_token),
     db: Session = Depends(get_db)
 ):
     """Update article by slug (only by author)"""
     try:
         crud = ArticleCRUD(db)
-        updated_article = crud.update_article(slug, article_data, current_user.id)
+        updated_article = crud.update_article(slug, article_data, user_id)
         
         if not updated_article:
             raise HTTPException(
@@ -147,13 +173,13 @@ def update_article(
 @router.delete("/{slug}", response_model=SuccessResponse)
 def delete_article(
     slug: str,
-    current_user: User = Depends(get_current_active_user),
+    user_id: UUID = Depends(get_user_id_from_token),
     db: Session = Depends(get_db)
 ):
     """Delete article by slug (only by author)"""
     try:
         crud = ArticleCRUD(db)
-        deleted = crud.delete_article(slug, current_user.id)
+        deleted = crud.delete_article(slug, user_id)
         
         if not deleted:
             raise HTTPException(

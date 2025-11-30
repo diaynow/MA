@@ -3,14 +3,34 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 from pydantic import PositiveInt
 from typing import List
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from jose import JWTError, jwt
 
 from src.models.database import get_db
 from src.models.schemas import CommentCreate, CommentResponse, CommentListResponse, SuccessResponse, ErrorResponse
 from src.controllers.crud import CommentCRUD, ArticleCRUD
-from src.middleware.auth import get_current_user
-from src.models.database import User
+from src.config import settings
 
 router = APIRouter()
+security = HTTPBearer()
+
+
+def get_user_id_from_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> UUID:
+    """Extract user_id from JWT token"""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    try:
+        payload = jwt.decode(credentials.credentials, settings.secret_key, algorithms=[settings.algorithm])
+        user_id_str = payload.get("user_id")
+        if user_id_str is None:
+            raise credentials_exception
+        return UUID(user_id_str)
+    except (JWTError, ValueError, TypeError):
+        raise credentials_exception
 
 
 @router.post("/{slug}/comments", response_model=SuccessResponse)
@@ -18,7 +38,7 @@ async def create_comment(
     slug: str,
     comment_data: CommentCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    user_id: UUID = Depends(get_user_id_from_token)
 ):
     """Add a comment to an article"""
     try:
@@ -36,7 +56,7 @@ async def create_comment(
         comment = comment_crud.create_comment(
             comment_data=comment_data,
             article_id=article.id,
-            author_id=current_user.id
+            author_id=user_id
         )
         
         return SuccessResponse(
@@ -105,7 +125,7 @@ async def delete_comment(
     slug: str,
     comment_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    user_id: UUID = Depends(get_user_id_from_token)
 ):
     """Delete a comment (only by author)"""
     try:
@@ -122,7 +142,7 @@ async def delete_comment(
         comment_crud = CommentCRUD(db)
         success = comment_crud.delete_comment(
             comment_id=comment_id,
-            user_id=current_user.id
+            user_id=user_id
         )
         
         if not success:

@@ -1,18 +1,17 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
-from src.models.database import get_db, User
 from src.utils.auth import verify_token
 from src.config import settings
+from typing import Optional
+from uuid import UUID
 
 security = HTTPBearer()
 
 
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
-) -> User:
-    """Get current authenticated user"""
+def get_current_user_email(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> str:
+    """Get current authenticated user email from JWT token"""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -20,14 +19,27 @@ def get_current_user(
     )
     
     email = verify_token(credentials.credentials, credentials_exception)
-    user = db.query(User).filter(User.email == email).first()
-    if user is None:
-        raise credentials_exception
-    return user
+    return email
 
 
-def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
-    """Get current active user"""
-    if not current_user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
-    return current_user
+def get_current_user_id(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> Optional[UUID]:
+    """Get current authenticated user ID from JWT token
+    
+    Note: In microservices architecture, we don't have direct DB access to users.
+    We only validate JWT token. User ID should be stored in token payload if needed.
+    For now, we return None and rely on email for identification.
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    # For now, we only validate token and return email
+    # In production, you might want to include user_id in JWT payload
+    email = verify_token(credentials.credentials, credentials_exception)
+    # Return None as we don't have user_id in token yet
+    # This can be extended to decode user_id from token if added to JWT payload
+    return None

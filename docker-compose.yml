@@ -1,45 +1,100 @@
+version: "3.9"
+
 services:
-  db:
-    image: postgres:15
+  # Main database for backend (articles, comments)
+  db-main:
+    image: postgres:16
     environment:
-      POSTGRES_DB: blog_platform
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app_main
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+      - db_main_data:/var/lib/postgresql/data
+    networks:
+      - internal
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user -d blog_platform"]
+      test: ["CMD-SHELL", "pg_isready -U app -d app_main"]
       interval: 10s
       timeout: 5s
       retries: 5
-    profiles:
-      - dev
-      - prod
 
-  app:
-    build: .
-    ports:
-      - "8000:8000"
+  # Users database for users-api
+  db-users:
+    image: postgres:16
     environment:
-      - DATABASE_URL=postgresql://user:password@db:5432/blog_platform
-      - SECRET_KEY=your-secret-key-change-in-production
-      - DEBUG=true
-    depends_on:
-      db:
-        condition: service_healthy
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app_users
     volumes:
-      - .:/app
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+      - db_users_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app_users"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Main backend service (articles, comments)
+  backend:
+    build: .
+    depends_on:
+      db-main:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://app:app@db-main:5432/app_main
+      - SECRET_KEY=your-secret-key-change-in-production
+      - DEBUG=false
+    networks:
+      - internal
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-    profiles:
-      - prod
+
+  # Users microservice
+  users-api:
+    build: ./users_service
+    depends_on:
+      db-users:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://app:app@db-users:5432/app_users
+      - SECRET_KEY=your-secret-key-change-in-production
+      - DEBUG=false
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # API Gateway (Nginx)
+  api-gateway:
+    image: nginx:latest
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - users-api
+    ports:
+      - "80:80"
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  internal:
+    driver: bridge
 
 volumes:
-  postgres_data:
+  db_main_data:
+  db_users_data:

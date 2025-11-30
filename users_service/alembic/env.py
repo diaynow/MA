@@ -9,7 +9,7 @@ import sys
 # Add the src directory to the Python path
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'src'))
 
-from src.models.database import Base, Article, Comment
+from src.models.database import Base, User
 from src.config import settings
 
 # this is the Alembic Config object, which provides
@@ -88,3 +88,4 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
+

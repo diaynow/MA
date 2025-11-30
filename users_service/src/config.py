@@ -4,12 +4,12 @@ from typing import Optional
 
 class Settings(BaseSettings):
     # Database settings
-    database_url: str = "postgresql://app:app@db-main:5432/app_main"
+    database_url: str = "postgresql://app:app@db-users:5432/app_users"
     
     # API settings
-    api_title: str = "Blog Platform API"
+    api_title: str = "Users API"
     api_version: str = "1.0.0"
-    api_description: str = "Backend for simplified blog platform"
+    api_description: str = "User management microservice"
     
     # Security settings
     secret_key: str = "your-secret-key-change-in-production"
@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # Debug mode
     debug: bool = False
     
-    # Render specific settings
+    # Port settings
     port: int = 8000
     host: str = "0.0.0.0"
     
@@ -35,3 +35,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+

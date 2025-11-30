@@ -5,8 +5,7 @@ from fastapi.responses import JSONResponse
 import time
 import logging
 from src.config import settings
-from src.models.database import engine, Base
-from src.routes import articles, comments
+from src.routes import users, user
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -17,8 +16,8 @@ app = FastAPI(
     title=settings.api_title,
     version=settings.api_version,
     description=settings.api_description,
-    docs_url="/docs",
-    redoc_url="/redoc"
+    docs_url="/api/users/docs",
+    openapi_url="/api/users/openapi.json"
 )
 
 # CORS middleware
@@ -55,8 +54,8 @@ async def log_requests(request: Request, call_next):
 
 
 # Include routers
-app.include_router(articles.router)
-app.include_router(comments.router, prefix="/api/articles", tags=["comments"])
+app.include_router(users.router)
+app.include_router(user.router)
 
 
 # Root endpoint
@@ -65,22 +64,18 @@ def root():
     """Root endpoint with API information"""
     return {
         "success": True,
-        "message": "Blog Platform API",
+        "message": "Users API",
         "version": settings.api_version,
         "docs": "/docs",
         "redoc": "/redoc",
         "endpoints": {
-            "articles": {
-                "POST /api/articles": "Create article",
-                "GET /api/articles": "Get all articles",
-                "GET /api/articles/{slug}": "Get article by slug",
-                "PUT /api/articles/{slug}": "Update article",
-                "DELETE /api/articles/{slug}": "Delete article"
+            "users": {
+                "POST /api/users": "Register user",
+                "POST /api/users/login": "Login user"
             },
-            "comments": {
-                "POST /api/articles/{slug}/comments": "Add comment to article",
-                "GET /api/articles/{slug}/comments": "Get comments for article",
-                "DELETE /api/articles/{slug}/comments/{id}": "Delete comment"
+            "user": {
+                "GET /api/user": "Get current user",
+                "PUT /api/user": "Update current user"
             }
         }
     }
@@ -119,3 +114,4 @@ if __name__ == "__main__":
         port=8000,
         reload=True
     )
+
