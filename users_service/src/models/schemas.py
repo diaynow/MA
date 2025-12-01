@@ -44,11 +44,20 @@ class UserUpdate(BaseModel):
 class UserResponse(UserBase):
     id: UUID
     is_active: bool
+    subscription_key: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class SubscriptionKeyUpdate(BaseModel):
+    subscription_key: str = Field(..., min_length=10, max_length=255)
+
+
+class SubscribeRequest(BaseModel):
+    target_user_id: UUID = Field(..., description="Author to follow")
 
 
 # Auth schemas

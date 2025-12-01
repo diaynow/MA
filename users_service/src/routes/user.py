@@ -18,7 +18,7 @@ def get_current_user_info(
     return SuccessResponse(
         message="User information retrieved successfully",
         data={
-            "user": UserResponse.from_orm(current_user).dict()
+            "user": UserResponse.model_validate(current_user).model_dump()
         }
     )
 
@@ -43,7 +43,7 @@ def update_current_user(
         return SuccessResponse(
             message="User updated successfully",
             data={
-                "user": UserResponse.from_orm(updated_user).dict()
+                "user": UserResponse.model_validate(updated_user).model_dump()
             }
         )
     except ValueError as e:

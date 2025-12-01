@@ -1,10 +1,13 @@
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings
-from typing import Optional
 
 
 class Settings(BaseSettings):
     # Database settings
-    database_url: str = "postgresql://app:app@db-users:5432/app_users"
+    database_url: str = Field(
+        default="postgresql://app:app@db-users:5432/app_users",
+        validation_alias=AliasChoices("USERS_DATABASE_URL", "DATABASE_URL"),
+    )
     
     # API settings
     api_title: str = "Users API"

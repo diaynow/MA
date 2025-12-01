@@ -5,6 +5,13 @@ from typing import Optional
 class Settings(BaseSettings):
     # Database settings
     database_url: str = "postgresql://app:app@db-main:5432/app_main"
+    users_database_url: str = "postgresql://app:app@db-users:5432/app_users"
+    
+    # Queue / worker settings
+    redis_url: str = "redis://redis:6379/0"
+    notifications_queue: str = "article-notifications"
+    push_service_url: str = "http://push-notificator:8000/api/v1/notify"
+    push_timeout_seconds: int = 5
     
     # API settings
     api_title: str = "Blog Platform API"

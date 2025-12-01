@@ -1,9 +1,10 @@
-from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from src.models.database import User
-from src.models.schemas import UserCreate, UserUpdate
+from sqlalchemy.orm import Session
 from typing import Optional
 import uuid
+
+from src.models.database import Subscriber, User
+from src.models.schemas import UserCreate, UserUpdate
 
 
 class UserCRUD:
@@ -93,3 +94,47 @@ class UserCRUD:
             return None
         return user
 
+
+class SubscriptionCRUD:
+    """Subscription and notification helpers."""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def update_subscription_key(self, user_id: uuid.UUID, subscription_key: str) -> Optional[User]:
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return None
+        user.subscription_key = subscription_key
+        self.db.commit()
+        self.db.refresh(user)
+        return user
+
+    def subscribe(self, subscriber_id: uuid.UUID, author_id: uuid.UUID) -> None:
+        if subscriber_id == author_id:
+            raise ValueError("You cannot subscribe to yourself")
+        
+        author = self.db.query(User).filter(User.id == author_id).first()
+        if not author:
+            raise ValueError("Target user not found")
+        
+        existing = (
+            self.db.query(Subscriber)
+            .filter(
+                Subscriber.subscriber_id == subscriber_id,
+                Subscriber.author_id == author_id,
+            )
+            .first()
+        )
+        if existing:
+            return
+        
+        subscription = Subscriber(
+            subscriber_id=subscriber_id,
+            author_id=author_id,
+        )
+        try:
+            self.db.add(subscription)
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()

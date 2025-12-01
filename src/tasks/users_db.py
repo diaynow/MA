@@ -1,38 +1,23 @@
-from sqlalchemy import (
-    Boolean,
-    Column,
-    DateTime,
-    ForeignKey,
-    Integer,
-    String,
-    Text,
-    UniqueConstraint,
-    create_engine,
-)
+"""
+Separate module for accessing Users DB without importing users_service config.
+This avoids Pydantic validation errors when worker imports users_service models.
+"""
+from sqlalchemy import create_engine, Column, String, Text, DateTime, Boolean, Integer, UniqueConstraint, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, sessionmaker
+from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 from datetime import datetime
-from passlib.context import CryptContext
+
 from src.config import settings
 
-# Database setup
-engine = create_engine(settings.database_url)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-
-# Password hashing
-pwd_context = CryptContext(
-    schemes=["bcrypt"], 
-    deprecated="auto",
-    bcrypt__rounds=12,
-    bcrypt__min_rounds=10,
-    bcrypt__max_rounds=15
-)
+# Create engine for Users DB using URL from main config
+users_engine = create_engine(settings.users_database_url)
+UsersSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=users_engine)
+UsersBase = declarative_base()
 
 
-class User(Base):
+class User(UsersBase):
     __tablename__ = "users"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -46,17 +31,8 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    def verify_password(self, password: str) -> bool:
-        return pwd_context.verify(password, self.password_hash)
 
-    def set_password(self, password: str):
-        self.password_hash = pwd_context.hash(password)
-
-    def __repr__(self):
-        return f"<User(id={self.id}, username='{self.username}', email='{self.email}')>"
-
-
-class Subscriber(Base):
+class Subscriber(UsersBase):
     __tablename__ = "subscribers"
     __table_args__ = (
         UniqueConstraint("subscriber_id", "author_id", name="uq_subscriber_author"),
@@ -75,16 +51,8 @@ class Subscriber(Base):
         "User", back_populates="subscriptions", foreign_keys=[subscriber_id]
     )
 
-    def __repr__(self):
-        return f"<Subscriber(subscriber_id={self.subscriber_id}, author_id={self.author_id})>"
-
 
 # Configure relationship after both classes are defined
-# This avoids AmbiguousForeignKeysError when there are multiple FKs to the same table
-from sqlalchemy import inspect
-from sqlalchemy.orm import configure_mappers
-
-# Reconfigure the relationship with explicit foreign_keys
 User.subscriptions = relationship(
     Subscriber,
     back_populates="subscriber",
@@ -93,7 +61,7 @@ User.subscriptions = relationship(
 )
 
 
-class NotificationLog(Base):
+class NotificationLog(UsersBase):
     __tablename__ = "notification_logs"
     __table_args__ = (
         UniqueConstraint(
@@ -113,18 +81,9 @@ class NotificationLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    def __repr__(self):
-        return (
-            f"<NotificationLog(subscriber_id={self.subscriber_id}, "
-            f"article_id={self.article_id}, status={self.status})>"
-        )
 
-
-# Dependency to get database session
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+# Session factory
+def get_users_session():
+    """Get a new Users DB session."""
+    return UsersSessionLocal()
 

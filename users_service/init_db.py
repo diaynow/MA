@@ -47,7 +47,9 @@ def run_migrations():
 
 
 if __name__ == "__main__":
-    database_url = os.getenv("DATABASE_URL", "postgresql://app:app@db-users:5432/app_users")
+    database_url = os.getenv("USERS_DATABASE_URL") or os.getenv(
+        "DATABASE_URL", "postgresql://app:app@db-users:5432/app_users"
+    )
     
     # Skip DB initialization if localhost (for local dev)
     if "localhost" in database_url or "127.0.0.1" in database_url:

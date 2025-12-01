@@ -1,6 +1,23 @@
 version: "3.9"
 
 services:
+  redis:
+    image: redis:7-alpine
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  push-notificator:
+    image: ghcr.io/ayusavin/push-notification-playground:1.0.0
+    ports:
+      - "8000:8000"
+    networks:
+      - internal
+
   # Main database for backend (articles, comments)
   db-main:
     image: postgres:16
@@ -41,10 +58,17 @@ services:
     depends_on:
       db-main:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       - DATABASE_URL=postgresql://app:app@db-main:5432/app_main
+      - USERS_DATABASE_URL=postgresql://app:app@db-users:5432/app_users
+      - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=your-secret-key-change-in-production
       - DEBUG=false
+      - PUSH_SERVICE_URL=http://push-notificator:8000/api/v1/notify
+      - PUSH_TIMEOUT_SECONDS=5
+      - NOTIFICATIONS_QUEUE=article-notifications
     networks:
       - internal
     healthcheck:
@@ -62,6 +86,7 @@ services:
         condition: service_healthy
     environment:
       - DATABASE_URL=postgresql://app:app@db-users:5432/app_users
+      - USERS_DATABASE_URL=postgresql://app:app@db-users:5432/app_users
       - SECRET_KEY=your-secret-key-change-in-production
       - DEBUG=false
     networks:
@@ -72,6 +97,34 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  worker:
+    build: .
+    command: celery -A src.tasks.notifications worker --loglevel=info --concurrency=2
+    depends_on:
+      db-main:
+        condition: service_healthy
+      db-users:
+        condition: service_healthy
+      backend:
+        condition: service_started
+      users-api:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      push-notificator:
+        condition: service_started
+    environment:
+      - DATABASE_URL=postgresql://app:app@db-main:5432/app_main
+      - USERS_DATABASE_URL=postgresql://app:app@db-users:5432/app_users
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=your-secret-key-change-in-production
+      - DEBUG=false
+      - PUSH_SERVICE_URL=http://push-notificator:8000/api/v1/notify
+      - PUSH_TIMEOUT_SECONDS=5
+      - NOTIFICATIONS_QUEUE=article-notifications
+    networks:
+      - internal
 
   # API Gateway (Nginx)
   api-gateway:

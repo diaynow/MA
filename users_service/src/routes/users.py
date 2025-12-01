@@ -1,12 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 from datetime import timedelta
-from src.models.database import get_db
+from src.models.database import User, get_db
 from src.models.schemas import (
-    UserCreate, UserLogin, UserResponse,
-    SuccessResponse
+    SubscribeRequest,
+    SubscriptionKeyUpdate,
+    SuccessResponse,
+    UserCreate,
+    UserLogin,
+    UserResponse,
 )
-from src.controllers.crud import UserCRUD
+from src.controllers.crud import SubscriptionCRUD, UserCRUD
+from src.middleware.auth import get_current_active_user
 from src.utils.auth import create_access_token
 from src.config import settings
 
@@ -22,7 +27,9 @@ def get_users_api_info():
         "service": "users-api",
         "endpoints": {
             "POST /api/users": "Register a new user",
-            "POST /api/users/login": "Login user and get access token"
+            "POST /api/users/login": "Login user and get access token",
+            "PUT /api/users/me/subscription-key": "Save push subscription key",
+            "POST /api/users/subscribe": "Subscribe to another user",
         }
     }
 
@@ -40,7 +47,7 @@ def register_user(
         return SuccessResponse(
             message="User registered successfully",
             data={
-                "user": UserResponse.from_orm(db_user).dict()
+                "user": UserResponse.model_validate(db_user).model_dump()
             }
         )
     except ValueError as e:
@@ -53,6 +60,44 @@ def register_user(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error"
         )
+
+
+@router.put("/me/subscription-key", response_model=SuccessResponse)
+def save_subscription_key(
+    payload: SubscriptionKeyUpdate,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Persist push subscription key for the current user."""
+    crud = SubscriptionCRUD(db)
+    updated_user = crud.update_subscription_key(current_user.id, payload.subscription_key)
+    if not updated_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    return SuccessResponse(
+        message="Subscription key saved",
+        data={"user": UserResponse.model_validate(updated_user).model_dump()},
+    )
+
+
+@router.post("/subscribe", status_code=status.HTTP_204_NO_CONTENT)
+def subscribe_user(
+    payload: SubscribeRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Subscribe current user to another author."""
+    crud = SubscriptionCRUD(db)
+    try:
+        crud.subscribe(current_user.id, payload.target_user_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/login", response_model=SuccessResponse)
@@ -80,7 +125,7 @@ def login_user(
         return SuccessResponse(
             message="Login successful",
             data={
-                "user": UserResponse.from_orm(user).dict(),
+                "user": UserResponse.model_validate(user).model_dump(),
                 "access_token": access_token,
                 "token_type": "bearer"
             }

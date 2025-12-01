@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from pydantic import PositiveInt
@@ -17,6 +19,9 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import HTTPException, status
 from jose import JWTError
 from src.config import settings
+from src.tasks import enqueue_article_notification
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/articles", tags=["articles"])
 
@@ -53,6 +58,10 @@ def create_article(
     try:
         crud = ArticleCRUD(db)
         db_article = crud.create_article(article_data, user_id)
+        try:
+            enqueue_article_notification(author_id=user_id, article_id=db_article.id)
+        except Exception as task_exc:
+            logger.error("Failed to enqueue notification task: %s", task_exc)
         
         return SuccessResponse(
             message="Article created successfully",
