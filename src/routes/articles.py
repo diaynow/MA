@@ -19,7 +19,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import HTTPException, status
 from jose import JWTError
 from src.config import settings
-from src.tasks import enqueue_article_notification
+from src.tasks.saga import enqueue_moderation_task
 
 logger = logging.getLogger(__name__)
 
@@ -54,14 +54,11 @@ def create_article(
     user_id: UUID = Depends(get_user_id_from_token),
     db: Session = Depends(get_db)
 ):
-    """Create a new article"""
+    """Create a new article (status: DRAFT)"""
     try:
         crud = ArticleCRUD(db)
         db_article = crud.create_article(article_data, user_id)
-        try:
-            enqueue_article_notification(author_id=user_id, article_id=db_article.id)
-        except Exception as task_exc:
-            logger.error("Failed to enqueue notification task: %s", task_exc)
+        # Note: No notification on creation, only after publication
         
         return SuccessResponse(
             message="Article created successfully",
@@ -207,6 +204,65 @@ def delete_article(
     except HTTPException:
         raise
     except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error"
+        )
+
+
+@router.post("/{slug}/publish", response_model=SuccessResponse)
+def publish_article(
+    slug: str,
+    user_id: UUID = Depends(get_user_id_from_token),
+    db: Session = Depends(get_db)
+):
+    """Request publication of an article (changes status from DRAFT to PENDING_PUBLISH)"""
+    try:
+        crud = ArticleCRUD(db)
+        db_article = crud.request_publication(slug, user_id)
+        
+        if not db_article:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Article not found"
+            )
+        
+        # Enqueue moderation task
+        try:
+            enqueue_moderation_task(
+                post_id=str(db_article.id),
+                author_id=str(db_article.author_id),
+                title=db_article.title,
+                body=db_article.body,
+                requested_by=str(user_id)
+            )
+            logger.info("Moderation task enqueued for article %s", db_article.id)
+        except Exception as task_exc:
+            logger.error("Failed to enqueue moderation task: %s", task_exc)
+            # Rollback status change if task enqueue fails
+            db_article.status = "DRAFT"
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to start publication process"
+            )
+        
+        return SuccessResponse(
+            message="Article publication requested successfully",
+            data={
+                "article": ArticleResponse.from_orm(db_article).dict(),
+                "status": db_article.status
+            }
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error publishing article: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error"

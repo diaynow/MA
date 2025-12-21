@@ -23,6 +23,10 @@ class Article(Base):
     slug = Column(String(255), unique=True, nullable=False, index=True)
     # user_id without foreign key - data ownership pattern
     author_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    # Status for publication workflow: DRAFT, PENDING_PUBLISH, PUBLISHED, REJECTED, ERROR
+    status = Column(String(32), nullable=False, default="DRAFT", index=True)
+    # Preview URL for published articles
+    preview_url = Column(String(500), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -30,7 +34,7 @@ class Article(Base):
     comments = relationship("Comment", back_populates="article", cascade="all, delete-orphan")
 
     def __repr__(self):
-        return f"<Article(id={self.id}, title='{self.title}', slug='{self.slug}')>"
+        return f"<Article(id={self.id}, title='{self.title}', slug='{self.slug}', status='{self.status}')>"
 
 
 class Comment(Base):
@@ -50,6 +54,20 @@ class Comment(Base):
 
     def __repr__(self):
         return f"<Comment(id={self.id}, article_id='{self.article_id}', author_id='{self.author_id}')>"
+
+
+class ApiKey(Base):
+    __tablename__ = "api_keys"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    key = Column(String(255), unique=True, nullable=False, index=True)
+    description = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)
+    is_active = Column(String(10), default="active", nullable=False)  # active, revoked
+
+    def __repr__(self):
+        return f"<ApiKey(id={self.id}, description='{self.description}')>"
 
 
 # Dependency to get database session

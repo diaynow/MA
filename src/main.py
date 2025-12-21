@@ -6,7 +6,7 @@ import time
 import logging
 from src.config import settings
 from src.models.database import engine, Base
-from src.routes import articles, comments
+from src.routes import articles, comments, internal
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -57,6 +57,7 @@ async def log_requests(request: Request, call_next):
 # Include routers
 app.include_router(articles.router)
 app.include_router(comments.router, prefix="/api/articles", tags=["comments"])
+app.include_router(internal.router)
 
 
 # Root endpoint

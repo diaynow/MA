@@ -12,13 +12,19 @@ celery_app = Celery(
 celery_app.conf.update(
     task_default_queue=settings.notifications_queue,
     task_routes={
-        "src.tasks.notifications.*": {"queue": settings.notifications_queue}
+        "src.tasks.notifications.*": {"queue": settings.notifications_queue},
+        "src.tasks.saga.*": {"queue": settings.notifications_queue},
     },
     task_serializer="json",
     result_serializer="json",
     accept_content=["json"],
     broker_connection_retry_on_startup=True,
     worker_max_tasks_per_child=1000,
+    # DLQ configuration
+    task_reject_on_worker_lost=True,
+    task_acks_late=True,
+    task_default_max_retries=3,
+    task_default_retry_delay=5,
 )
 
 __all__ = ["celery_app"]

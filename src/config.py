@@ -10,8 +10,11 @@ class Settings(BaseSettings):
     # Queue / worker settings
     redis_url: str = "redis://redis:6379/0"
     notifications_queue: str = "article-notifications"
+    dlq_queue: str = "dlq"
     push_service_url: str = "http://push-notificator:8000/api/v1/notify"
     push_timeout_seconds: int = 5
+    backend_url: str = "http://backend:8000"
+    internal_api_key: Optional[str] = None
     
     # API settings
     api_title: str = "Blog Platform API"

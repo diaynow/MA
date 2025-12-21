@@ -90,6 +90,8 @@ class ArticleResponse(ArticleBase):
     id: UUID
     slug: str
     author_id: UUID
+    status: str
+    preview_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

@@ -12,7 +12,7 @@ class ArticleCRUD:
         self.db = db
 
     def create_article(self, article_data: ArticleCreate, author_id: uuid.UUID) -> Article:
-        """Create a new article"""
+        """Create a new article (default status: DRAFT)"""
         slug = generate_slug(article_data.title)
         
         # Ensure slug is unique
@@ -28,7 +28,8 @@ class ArticleCRUD:
             body=article_data.body,
             tag_list=article_data.tag_list or [],
             slug=slug,
-            author_id=author_id
+            author_id=author_id,
+            status="DRAFT"  # Default status
         )
         
         try:
@@ -110,6 +111,63 @@ class ArticleCRUD:
         self.db.delete(db_article)
         self.db.commit()
         return True
+    
+    def get_article_by_id(self, article_id: uuid.UUID) -> Optional[Article]:
+        """Get article by ID"""
+        return self.db.query(Article).filter(Article.id == article_id).first()
+    
+    def update_article_status(self, article_id: uuid.UUID, new_status: str) -> Optional[Article]:
+        """Update article status (internal use, no authorization check)"""
+        db_article = self.get_article_by_id(article_id)
+        if not db_article:
+            return None
+        
+        db_article.status = new_status
+        try:
+            self.db.commit()
+            self.db.refresh(db_article)
+            return db_article
+        except Exception:
+            self.db.rollback()
+            raise
+    
+    def update_article_preview(self, article_id: uuid.UUID, preview_url: str) -> Optional[Article]:
+        """Update article preview URL (internal use)"""
+        db_article = self.get_article_by_id(article_id)
+        if not db_article:
+            return None
+        
+        db_article.preview_url = preview_url
+        try:
+            self.db.commit()
+            self.db.refresh(db_article)
+            return db_article
+        except Exception:
+            self.db.rollback()
+            raise
+    
+    def request_publication(self, slug: str, user_id: uuid.UUID) -> Optional[Article]:
+        """Request publication: change status from DRAFT to PENDING_PUBLISH (only by author)"""
+        db_article = self.get_article_by_slug(slug)
+        if not db_article:
+            return None
+        
+        # Check if user is the author
+        if db_article.author_id != user_id:
+            raise ValueError("You can only publish your own articles")
+        
+        # Check if article is in DRAFT status
+        if db_article.status != "DRAFT":
+            raise ValueError(f"Article must be in DRAFT status to publish. Current status: {db_article.status}")
+        
+        db_article.status = "PENDING_PUBLISH"
+        try:
+            self.db.commit()
+            self.db.refresh(db_article)
+            return db_article
+        except Exception:
+            self.db.rollback()
+            raise
 
 
 class CommentCRUD:

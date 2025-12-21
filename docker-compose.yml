@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   redis:
     image: redis:7-alpine
@@ -69,6 +67,9 @@ services:
       - PUSH_SERVICE_URL=http://push-notificator:8000/api/v1/notify
       - PUSH_TIMEOUT_SECONDS=5
       - NOTIFICATIONS_QUEUE=article-notifications
+      - DLQ_QUEUE=dlq
+      - BACKEND_URL=http://backend:8000
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY:-change-me-in-production}
     networks:
       - internal
     healthcheck:
@@ -100,7 +101,7 @@ services:
 
   worker:
     build: .
-    command: celery -A src.tasks.notifications worker --loglevel=info --concurrency=2
+    command: celery -A src.tasks.notifications worker --loglevel=info --concurrency=2 -Q article-notifications
     depends_on:
       db-main:
         condition: service_healthy
@@ -123,6 +124,55 @@ services:
       - PUSH_SERVICE_URL=http://push-notificator:8000/api/v1/notify
       - PUSH_TIMEOUT_SECONDS=5
       - NOTIFICATIONS_QUEUE=article-notifications
+      - DLQ_QUEUE=dlq
+      - BACKEND_URL=http://backend:8000
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY:-change-me-in-production}
+    networks:
+      - internal
+
+  saga-worker:
+    build: .
+    command: celery -A src.tasks.saga worker --loglevel=info --concurrency=2 -Q article-notifications
+    depends_on:
+      db-main:
+        condition: service_healthy
+      db-users:
+        condition: service_healthy
+      backend:
+        condition: service_started
+      users-api:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://app:app@db-main:5432/app_main
+      - USERS_DATABASE_URL=postgresql://app:app@db-users:5432/app_users
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=your-secret-key-change-in-production
+      - DEBUG=false
+      - NOTIFICATIONS_QUEUE=article-notifications
+      - DLQ_QUEUE=dlq
+      - BACKEND_URL=http://backend:8000
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY:-change-me-in-production}
+    networks:
+      - internal
+
+  dlq-worker:
+    build: .
+    command: celery -A src.tasks.dlq worker --loglevel=info --concurrency=1 -Q dlq
+    depends_on:
+      db-main:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    environment:
+      - DATABASE_URL=postgresql://app:app@db-main:5432/app_main
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=your-secret-key-change-in-production
+      - DEBUG=false
+      - DLQ_QUEUE=dlq
     networks:
       - internal
 
